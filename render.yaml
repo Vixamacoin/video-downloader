@@ -1,0 +1,13 @@
+# Render (free tier) — deploy config.
+# Render reads this file when you connect the repo: it builds the app,
+# downloads yt-dlp, and starts the server. No code changes needed.
+services:
+  - type: web
+    name: video-downloader
+    env: node
+    plan: free
+    buildCommand: mkdir -p bin && (curl -L -o bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp && chmod +x bin/yt-dlp || pip install yt-dlp)
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production

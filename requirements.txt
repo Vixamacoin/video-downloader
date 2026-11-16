@@ -1,0 +1,3 @@
+# Alternative way to install yt-dlp on hosts that use Python.
+# (Render uses the buildCommand in render.yaml instead — this file is a fallback.)
+yt-dlp
