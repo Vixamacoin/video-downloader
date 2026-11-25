@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="/favicon.png">
 <title>Video Downloader — TikTok, Facebook &amp; Instagram</title>
 <meta name="description" content="Paste a TikTok, Facebook, or Instagram link and download the video. Free, no login.">
 <style>
@@ -19,7 +20,10 @@
     padding: 24px 16px 48px;
   }
   .wrap { width: 100%; max-width: 640px; }
-  h1 { font-size: 1.9rem; margin: 8px 0 4px; text-align: center; }
+  h1 { font-size: 1.9rem; margin: 8px 0 4px; text-align: center; display: flex; align-items: center; justify-content: center; gap: 10px; }
+  .site-logo { width: 46px; height: 46px; border-radius: 12px; animation: logoFloat 3s ease-in-out infinite, logoGlow 3s ease-in-out infinite; }
+  @keyframes logoFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+  @keyframes logoGlow { 0%, 100% { filter: drop-shadow(0 0 0 rgba(56, 189, 248, 0)); } 50% { filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.55)); } }
   .tagline { text-align: center; color: #94a3b8; margin: 0 0 24px; font-size: 1rem; }
   .badges { display: flex; gap: 8px; justify-content: center; margin-bottom: 24px; flex-wrap: wrap; }
   .badge {
@@ -119,7 +123,7 @@
   <span class="site">primeflexlogistics.com ↗</span>
 </a>
 <div class="wrap">
-  <h1>📥 Video Downloader</h1>
+  <h1><img class="site-logo" src="/logo.png" alt="Video Downloader logo"> Video Downloader</h1>
   <p class="tagline">Save videos from TikTok, Facebook &amp; Instagram — free, no login.</p>
   <div class="badges"><span class="badge">TikTok</span><span class="badge">Facebook</span><span class="badge">Instagram</span></div>
 
