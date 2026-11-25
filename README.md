@@ -8,7 +8,9 @@ the video itself. No login, no account, no payment, no app to install.
 - One page, one box: paste a video link, tap **Download video**.
 - It shows the video's title, who posted it, and a preview player.
 - Tap **Save** and the video file (MP4) downloads to your phone or computer.
-- TikTok downloads come without the watermark when available. Facebook offers
+- TikTok downloads come without the watermark, always. The watermarked copy
+  is never offered; if the clean copy isn't available from the usual source,
+  a free no-watermark service is used as a backup. Facebook offers
   HD and SD when available.
 - Only **public** videos work. Private, friends-only, deleted, or login-only
   videos can't be downloaded — no tool can do those honestly.

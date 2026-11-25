@@ -143,8 +143,11 @@ function pickFormats(info, platform) {
   // video-only DASH streams (acodec 'none') — those would download silent.
   // Formats with unknown codecs (null) are the platforms' progressive MP4
   // files, which do include audio (e.g. Facebook hd/sd, Instagram 1/2/3).
+  // TikTok's "download" format has the TikTok logo baked in — never offer
+  // it. The play-API formats are the clean copy, with no watermark.
   const combined = (info.formats || []).filter(
-    (f) => f.url && f.ext === 'mp4' && f.vcodec !== 'none' && f.acodec !== 'none'
+    (f) => f.url && f.ext === 'mp4' && f.vcodec !== 'none' && f.acodec !== 'none' &&
+      !(platform === 'TikTok' && (f.format_id === 'download' || f.format_note === 'watermarked'))
   );
   const byKey = new Map();
   for (const f of combined) {
@@ -171,11 +174,9 @@ function pickFormats(info, platform) {
       else if (platform === 'Facebook' && f.format_id === 'sd') label = 'SD';
       else label = 'Video';
       let note = '';
-      if (platform === 'TikTok') {
-        // yt-dlp's TikTok "download" format carries the watermark; the
-        // play-API formats do not.
-        note = f.format_id === 'download' ? 'with watermark' : 'no watermark';
-      }
+      // Every TikTok format offered here is the clean copy — the
+      // watermarked one is filtered out above, never shown.
+      if (platform === 'TikTok') note = 'no watermark';
       return {
         id: f.format_id,
         label,
@@ -185,6 +186,27 @@ function pickFormats(info, platform) {
       };
     });
   return list;
+}
+
+// Free no-watermark lookup for TikTok, used only when yt-dlp finds no
+// clean copy. Returns the direct no-watermark file URL, or null.
+function fetchTikTokNoWatermark(videoUrl) {
+  return new Promise((resolve) => {
+    const api = `https://www.tikwm.com/api/?url=${encodeURIComponent(videoUrl)}`;
+    const req = https.get(api, { timeout: 15000, headers: { 'User-Agent': 'VideoDownloader/1.0' } }, (up) => {
+      let body = '';
+      up.on('data', (c) => { body += c; if (body.length > 2 * 1024 * 1024) req.destroy(); });
+      up.on('end', () => {
+        try {
+          const d = JSON.parse(body);
+          const play = d && d.data && d.data.play;
+          resolve(typeof play === 'string' && play.startsWith('http') ? play : null);
+        } catch (_) { resolve(null); }
+      });
+    });
+    req.on('timeout', () => { req.destroy(); resolve(null); });
+    req.on('error', () => resolve(null));
+  });
 }
 
 function safeFilename(info) {
@@ -202,7 +224,7 @@ function resolveVideo(rawUrl) {
     const { url, platform } = checked;
 
     const args = ['--no-playlist', '-J', '--no-warnings', '--socket-timeout', '30', url];
-    const child = execFile(YT_DLP, args, { timeout: RESOLVE_TIMEOUT_MS, maxBuffer: 20 * 1024 * 1024 }, (err, stdout, stderr) => {
+    const child = execFile(YT_DLP, args, { timeout: RESOLVE_TIMEOUT_MS, maxBuffer: 20 * 1024 * 1024 }, async (err, stdout, stderr) => {
       if (err) {
         const killed = err.killed ? 'ETIMEDOUT' : null;
         return resolve({ error: friendlyError(stderr || err.message, killed) });
@@ -213,7 +235,17 @@ function resolveVideo(rawUrl) {
       } catch (_) {
         return resolve({ error: 'Could not read the video details. Please try again.' });
       }
-      const formats = pickFormats(info, platform);
+      let formats = pickFormats(info, platform);
+      if (platform === 'TikTok' && !formats.length) {
+        // yt-dlp found no clean copy for this video (some videos only
+        // expose the watermarked file). Ask the free tikwm service for
+        // the no-watermark file instead — only the video link is sent,
+        // no account and no key.
+        const clean = await fetchTikTokNoWatermark(url);
+        if (clean) {
+          formats = [{ id: 'tiktok-nowm', label: 'Video', note: 'no watermark', height: null, url: clean }];
+        }
+      }
       if (!formats.length) {
         return resolve({ error: 'No downloadable video was found at that link. It may be a photo post, a private post, or blocked.' });
       }
@@ -257,6 +289,7 @@ const DOWNLOAD_HOSTS = [
   /(^|\.)tiktokcdn\.com$/,
   /(^|\.)tiktokcdn-us\.com$/,
   /(^|\.)tiktok\.com$/,
+  /(^|\.)tikwm\.com$/,
   /(^|\.)fbcdn\.net$/,
   /(^|\.)cdninstagram\.com$/,
   /(^|\.)instagram\.com$/,
