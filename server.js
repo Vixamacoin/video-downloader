@@ -276,17 +276,22 @@ function resolveVideo(rawUrl) {
       } catch (_) {
         return resolve({ error: 'Could not read the video details. Please try again.' });
       }
-      let formats = pickFormats(info, platform);
-      if (platform === 'TikTok' && !formats.length) {
-        // yt-dlp found no clean copy for this video (some videos only
-        // expose the watermarked file). Ask the free tikwm service for
-        // the no-watermark file instead — only the video link is sent,
-        // no account and no key.
-        const tk = await fetchTikTokNoWatermark(url);
-        if (tk) {
-          formats = [{ id: 'tiktok-nowm', label: 'Video', note: 'no watermark', height: null, url: tk.play }];
+      if (platform === 'TikTok') {
+        // TikTok's own video servers refuse this host, so the files yt-dlp
+        // finds cannot be fetched by the server — only listed. The
+        // no-watermark service's copy lives on a host the server can
+        // reach, so use it first. If it has nothing, fall through to the
+        // yt-dlp files (the visitor's own browser can usually open those
+        // directly, even when the server cannot).
+        let tk = await fetchTikTokNoWatermark(url);
+        if (!tk) {
+          // The free service hiccups sometimes — one retry before giving up.
+          await new Promise((r) => setTimeout(r, 1500));
+          tk = await fetchTikTokNoWatermark(url);
         }
+        if (tk) return resolve(tikTokFallbackResult(tk, url));
       }
+      const formats = pickFormats(info, platform);
       if (!formats.length) {
         return resolve({ error: 'No downloadable video was found at that link. It may be a photo post, a private post, or blocked.' });
       }
