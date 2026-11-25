@@ -188,8 +188,12 @@ function pickFormats(info, platform) {
   return list;
 }
 
-// Free no-watermark lookup for TikTok, used only when yt-dlp finds no
-// clean copy. Returns the direct no-watermark file URL, or null.
+// Free no-watermark lookup for TikTok. TikTok often blocks the video
+// servers of hosting providers outright, so yt-dlp itself can fail there
+// even though it works elsewhere — when that happens this service (which
+// fetches TikTok from its own side) is the way in. Returns the tikwm data
+// object (play = no-watermark file, plus title/author/cover), or null.
+// Only the video link is sent; no account and no key.
 function fetchTikTokNoWatermark(videoUrl) {
   return new Promise((resolve) => {
     const api = `https://www.tikwm.com/api/?url=${encodeURIComponent(videoUrl)}`;
@@ -199,14 +203,44 @@ function fetchTikTokNoWatermark(videoUrl) {
       up.on('end', () => {
         try {
           const d = JSON.parse(body);
-          const play = d && d.data && d.data.play;
-          resolve(typeof play === 'string' && play.startsWith('http') ? play : null);
+          const data = d && d.data;
+          resolve(data && typeof data.play === 'string' && data.play.startsWith('http') ? data : null);
         } catch (_) { resolve(null); }
       });
     });
     req.on('timeout', () => { req.destroy(); resolve(null); });
     req.on('error', () => resolve(null));
   });
+}
+
+// Build a resolve result from the tikwm no-watermark data, used when
+// yt-dlp cannot fetch the video at all from this server.
+function tikTokFallbackResult(tk, videoUrl) {
+  const base = `${(tk.author && tk.author.nickname) || 'video'}_${tk.id || 'video'}`
+    .replace(/[^\w\-]+/g, '_')
+    .replace(/_+/g, '_')
+    .slice(0, 80);
+  const filename = `${base}.mp4`;
+  const referer = Buffer.from(videoUrl).toString('base64url');
+  return {
+    ok: true,
+    platform: 'TikTok',
+    title: tk.title || 'Video',
+    author: (tk.author && tk.author.nickname) || '',
+    authorHandle: (tk.author && tk.author.unique_id) || '',
+    thumbnail: tk.cover || null,
+    duration: tk.duration || null,
+    previewUrl: tk.play,
+    filename,
+    formats: [{
+      id: 'tiktok-nowm',
+      label: 'Video',
+      note: 'no watermark',
+      height: null,
+      directUrl: tk.play,
+      downloadPath: `/api/download?u=${Buffer.from(tk.play).toString('base64url')}&f=${encodeURIComponent(filename)}&r=${referer}`,
+    }],
+  };
 }
 
 function safeFilename(info) {
@@ -226,6 +260,13 @@ function resolveVideo(rawUrl) {
     const args = ['--no-playlist', '-J', '--no-warnings', '--socket-timeout', '30', url];
     const child = execFile(YT_DLP, args, { timeout: RESOLVE_TIMEOUT_MS, maxBuffer: 20 * 1024 * 1024 }, async (err, stdout, stderr) => {
       if (err) {
+        // TikTok often blocks this server's network entirely, so yt-dlp
+        // fails before it even gets the video. Try the no-watermark
+        // service instead — it fetches TikTok from its own side.
+        if (platform === 'TikTok') {
+          const tk = await fetchTikTokNoWatermark(url);
+          if (tk) return resolve(tikTokFallbackResult(tk, url));
+        }
         const killed = err.killed ? 'ETIMEDOUT' : null;
         return resolve({ error: friendlyError(stderr || err.message, killed) });
       }
@@ -241,9 +282,9 @@ function resolveVideo(rawUrl) {
         // expose the watermarked file). Ask the free tikwm service for
         // the no-watermark file instead — only the video link is sent,
         // no account and no key.
-        const clean = await fetchTikTokNoWatermark(url);
-        if (clean) {
-          formats = [{ id: 'tiktok-nowm', label: 'Video', note: 'no watermark', height: null, url: clean }];
+        const tk = await fetchTikTokNoWatermark(url);
+        if (tk) {
+          formats = [{ id: 'tiktok-nowm', label: 'Video', note: 'no watermark', height: null, url: tk.play }];
         }
       }
       if (!formats.length) {
